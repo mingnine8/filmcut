@@ -22,8 +22,8 @@ function resetInputs() {
       <input type="text" placeholder="ID" value="${part.id}">
       <input type="color" value="${color}">
       <span style="display:inline-block;width:16px;height:16px;background:${color};margin-left:6px;margin-right:6px;"></span>
-      <input type="number" placeholder="가로" value="${part.width}">
-      <input type="number" placeholder="세로" value="${part.height}">
+      <input type="number" placeholder="넓이" value="${part.height}">
+      <input type="number" placeholder="길이" value="${part.width}">
       <input type="number" placeholder="개수" value="${part.count}">
     `;
     container.appendChild(row);

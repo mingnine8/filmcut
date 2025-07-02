@@ -87,41 +87,88 @@ class SkylineBin {
 }
 
 class SkylineBinVertical {
-  constructor(width, height, offsetX = 0) {
+  constructor(width, height, offsetY = 0) {
     this.width = width;
     this.height = height;
-    this.offsetX = offsetX;
-    this.columns = []; // 각 column은 { x, width, currentY }
+    this.offsetY = offsetY; // 이건 x에 더해져야 함
+    this.skyline = [{ y: 0, x: 0, height: height }];
     this.usedRects = [];
-    this.cursorX = 0; // 새로운 column이 시작될 x 좌표
   }
 
   insert(rect) {
-    // 현재 컬럼이 없거나 현재 컬럼이 높이를 초과하면 새로운 컬럼
-    let column = this.columns[this.columns.length - 1];
+    let bestX = Infinity;
+    let bestY = -1;
+    let bestIndex = -1;
 
-    if (!column || column.currentY + rect.height > this.height) {
-      // 새 컬럼이 width를 넘지 않으면 추가
-      if (this.cursorX + rect.width > this.width) return false;
-
-      column = {
-        x: this.cursorX,
-        width: rect.width,
-        currentY: 0
-      };
-      this.columns.push(column);
-      this.cursorX += rect.width;
+    for (let i = 0; i < this.skyline.length; i++) {
+      const node = this.skyline[i];
+      if (node.height >= rect.height) {
+        const x = this.getMaxX(i, rect.height);
+        if (x + rect.width <= this.width && x < bestX) {
+          bestX = x;
+          bestY = node.y;
+          bestIndex = i;
+        }
+      }
     }
 
-    // 이 column에 rect 배치
-    rect.x = column.x + this.offsetX;
-    rect.y = column.currentY;
-    column.currentY += rect.height;
+    if (bestIndex === -1) return false;
 
+    rect.x = bestX ; // 👈 offsetX는 x에 적용
+    rect.y = bestY + this.offsetY;                // 👈 y는 offset 없이 0부터 시작
     this.usedRects.push(rect);
+
+    this.addSkylineLevel(bestIndex, {
+      y: bestY,
+      x: bestX + rect.width,
+      height: rect.height
+    });
     return true;
   }
+
+  getMaxX(index, height) {
+    let maxX = 0;
+    let remaining = height;
+    for (let i = index; i < this.skyline.length && remaining > 0; i++) {
+      maxX = Math.max(maxX, this.skyline[i].x);
+      remaining -= this.skyline[i].height;
+    }
+    return maxX;
+  }
+
+  addSkylineLevel(index, newNode) {
+    this.skyline.splice(index, 0, newNode);
+
+    let i = index + 1;
+    while (i < this.skyline.length) {
+      const curr = this.skyline[i];
+      const prev = this.skyline[i - 1];
+      if (curr.y < prev.y + prev.height) {
+        const overlap = prev.y + prev.height - curr.y;
+        if (overlap < curr.height) {
+          curr.y += overlap;
+          curr.height -= overlap;
+          break;
+        } else {
+          this.skyline.splice(i, 1);
+        }
+      } else {
+        break;
+      }
+    }
+
+    for (let j = 0; j < this.skyline.length - 1; j++) {
+      const a = this.skyline[j];
+      const b = this.skyline[j + 1];
+      if (a.x === b.x) {
+        a.height += b.height;
+        this.skyline.splice(j + 1, 1);
+        j--;
+      }
+    }
+  }
 }
+
 
 let autoIdCounter = 0;
 let nextId = 72;
@@ -141,128 +188,155 @@ function addPartRow() {
     <input type="text" value="${id}">
     <input type="color" value="${color}" style="margin-left: 6px;">
     <span style="display:inline-block;width:16px;height:16px;background:${color};margin-left:6px;margin-right:6px;"></span>
-    <input type="number" placeholder="가로">
-    <input type="number" placeholder="세로">
+    <input type="number" placeholder="넓이">
+    <input type="number" placeholder="길이">
     <input type="number" placeholder="개수">
   `;
     container.appendChild(row);
 }
 
 function optimizeAndDraw() {
-    const filmWidth = parseInt(document.getElementById('filmWidth').value);
-    const filmHeight = parseInt(document.getElementById('filmHeight').value);
-    const scale = 0.2;
+  const filmWidth = parseInt(document.getElementById('filmWidth').value);
+  const filmHeight = parseInt(document.getElementById('filmHeight').value);
+  const scale = 0.2;
 
-    const partRows = document.querySelectorAll('#parts .part-row');
-    const parts = [];
-    // 라디오 버튼 값 읽기
-    const selectedMode = document.querySelector('input[name="layoutMode"]:checked').value;
-    const BinClass = selectedMode === 'vertical' ? SkylineBinVertical : SkylineBin;
+  const partRows = document.querySelectorAll('#parts .part-row');
+  const parts = [];
 
-    // 유효성 검사 추가 (optimizeAndDraw 함수 내부에서 parts 배열 생성 이후 아래에 삽입)
-    for (const row of partRows) {
-        const wInput = row.querySelector('input[placeholder="가로"]');
-        const hInput = row.querySelector('input[placeholder="세로"]');
+  const selectedMode = document.querySelector('input[name="layoutMode"]:checked').value;
+  const BinClass = selectedMode === 'vertical' ? SkylineBinVertical : SkylineBin;
 
-        const width = parseInt(wInput.value);
-        const height = parseInt(hInput.value);
+  for (const row of partRows) {
+    const hInput = row.querySelector('input[placeholder="넓이"]');
+    const wInput = row.querySelector('input[placeholder="길이"]');
 
-        if (width > filmWidth) {
-            alert(`조각의 가로 (${width})가 필름의 가로 (${filmWidth})보다 큽니다.`);
-            wInput.focus();
-            return;
+    const width = parseInt(wInput.value);
+    const height = parseInt(hInput.value);
+
+    if (width > filmWidth) {
+      alert(`조각의 길이 (${width})가 필름의 가로 (${filmWidth})보다 큽니다.`);
+      wInput.focus();
+      return;
+    }
+    if (height > filmHeight) {
+      alert(`조각의 넓이 (${height})가 필름의 세로 (${filmHeight})보다 큽니다.`);
+      hInput.focus();
+      return;
+    }
+  }
+
+  partRows.forEach(row => {
+    const idInput = row.querySelector('input[type="text"]');
+    const colorInput = row.querySelector('input[type="color"]');
+    const numberInputs = row.querySelectorAll('input[type="number"]');
+    const [hInput, wInput, cInput] = numberInputs;
+    if (idInput.value && wInput.value && hInput.value && cInput.value) {
+      parts.push({
+        id: idInput.value,
+        width: parseInt(wInput.value),
+        height: parseInt(hInput.value),
+        count: parseInt(cInput.value),
+        color: colorInput ? colorInput.value + '66' : '#cccccc66'
+      });
+    }
+  });
+
+  // 큰 조각부터 정렬
+  parts.sort((a, b) => (b.width * b.height) - (a.width * a.height));
+
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = (selectedMode === 'vertical' ? filmWidth * parts.length : filmWidth) * scale;
+  canvas.height = (selectedMode === 'vertical' ? filmHeight : filmHeight * parts.length) * scale;
+
+  let allPlacements = [];
+  let bins = [];
+  let offsetX = 0;
+  let offsetY = 0;
+
+  for (const part of parts) {
+    for (let i = 0; i < part.count; i++) {
+      const rect = {
+        id: part.id,
+        width: part.width,
+        height: part.height,
+        color: part.color
+      };
+
+      let placed = false;
+      for (let bin of bins) {
+        if (bin.insert(rect)) {
+          allPlacements.push(rect);
+          placed = true;
+          break;
         }
-        if (height > filmHeight) {
-            alert(`조각의 세로 (${height})가 필름의 세로 (${filmHeight})보다 큽니다.`);
-            hInput.focus();
-            return;
+      }
+      const margin = 100;
+      if (!placed) {
+        const newBin = new BinClass(filmWidth, filmHeight, offsetY);
+        if (newBin.insert(rect)) {
+          bins.push(newBin);
+          allPlacements.push(rect);
+          offsetY += filmHeight + margin;
+        } else {
+          console.warn("조각을 배치할 수 없습니다:", rect);
         }
+      }
     }
+  }
 
-    partRows.forEach(row => {
-        const idInput = row.querySelector('input[type="text"]');
-        const colorInput = row.querySelector('input[type="color"]');
-        const numberInputs = row.querySelectorAll('input[type="number"]');
-        const [wInput, hInput, cInput] = numberInputs;
-        if (idInput.value && wInput.value && hInput.value && cInput.value) {
-            parts.push({
-                id: idInput.value,
-                width: parseInt(wInput.value),
-                height: parseInt(hInput.value),
-                count: parseInt(cInput.value),
-                color: colorInput ? colorInput.value + '66' : '#cccccc66'
-            });
-        }
-    });
+  if (allPlacements.length === 0) {
+    alert("조각이 배치되지 않았습니다. 필름 크기를 늘려보세요.");
+    return;
+  }
 
-    // 큰 조각부터 정렬
-    parts.sort((a, b) => (b.width * b.height) - (a.width * a.height));
+  // const maxX = allPlacements.reduce((max, r) => Math.max(max, r.x + r.width), 0);
+  // const maxY = allPlacements.reduce((max, r) => Math.max(max, r.y + r.height), 0);
+  // canvas.width = Math.ceil(maxX * scale);
+  // canvas.height = Math.ceil(maxY * scale) + 20;
+  const binMaxX = bins.reduce((max, b) => {
+  const binRight = (b.offsetX || 0) + filmWidth;
+  return Math.max(max, binRight);
+}, 0);
 
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = filmWidth * scale;
-    canvas.height = 1;
+const binMaxY = bins.reduce((max, b) => {
+  const binBottom = (b.offsetY || 0) + filmHeight;
+  return Math.max(max, binBottom);
+}, 0);
 
-    let allPlacements = [];
-    let bins = [];
-    let offsetY = 0;
+canvas.width = Math.ceil(binMaxX * scale);
+canvas.height = Math.ceil(binMaxY * scale);
 
-    for (const part of parts) {
-        for (let i = 0; i < part.count; i++) {
-            const rect = {
-                id: part.id,
-                width: part.width,
-                height: part.height,
-                color: part.color
-            };
 
-            let placed = false;
-            for (let bin of bins) {
-                if (bin.insert(rect)) {
-                    allPlacements.push(rect);
-                    placed = true;
-                    break;
-                }
-            }
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            if (!placed) {
-                const newBin = new BinClass(filmWidth, filmHeight, offsetY);
-                if (newBin.insert(rect)) {
-                    bins.push(newBin);
-                    allPlacements.push(rect);
-                    offsetY += filmHeight;
-                } else {
-                    console.warn("조각을 배치할 수 없습니다:", rect);
-                }
-            }
-        }
-    }
+  bins.forEach((bin, i) => {
+    const binOffset = bin.offsetY;
+    const binX = 0;
+    const binY = binOffset * scale;
 
-    // canvas 높이 계산 (최댓값 기반)
-    if (allPlacements.length === 0) {
-        alert("조각이 배치되지 않았습니다. 필름 크기를 늘려보세요.");
-        return;
-    }
+    // 배경
+    ctx.fillStyle = i % 2 === 0 ? '#f2f2f2' : '#e6e6e6';
+    ctx.fillRect(binX, binY, filmWidth * scale, filmHeight * scale);
 
-    const maxY = allPlacements.reduce((max, r) => Math.max(max, r.y + r.height), 0);
-    canvas.height = Math.ceil(maxY * scale) + 20;
+    // 테두리
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(binX, binY, filmWidth * scale, filmHeight * scale);
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // 라벨
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText(`📦 필름 ${i + 1}`, binX + 5, binY + 20);
+  });
 
-    for (let i = 0; i < bins.length; i++) {
-        const y = i * filmHeight * scale;
-        ctx.fillStyle = '#000';
-        ctx.font = 'bold 12px sans-serif';
-        ctx.fillText(`필름 ${i + 1}`, 5, y + 15);
-    }
-
-    for (const p of allPlacements) {
-        ctx.fillStyle = p.color;
-        ctx.fillRect(p.x * scale, p.y * scale, p.width * scale, p.height * scale);
-        ctx.strokeStyle = '#000';
-        ctx.strokeRect(p.x * scale, p.y * scale, p.width * scale, p.height * scale);
-        ctx.fillStyle = '#000';
-        ctx.font = '10px sans-serif';
-        ctx.fillText(`${p.width}x${p.height}`, (p.x + p.width / 6) * scale, (p.y + p.height / 2 + 3) * scale);
-    }
+  for (const p of allPlacements) {
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x * scale, p.y * scale, p.width * scale, p.height * scale);
+    ctx.strokeStyle = '#000';
+    ctx.strokeRect(p.x * scale, p.y * scale, p.width * scale, p.height * scale);
+    ctx.fillStyle = '#000';
+    ctx.font = '12px sans-serif';
+    ctx.fillText(`${p.id} ${p.width}x${p.height}`, (p.x + p.width / 3) * scale, (p.y + p.height / 2 + 9) * scale);
+  }
 }
