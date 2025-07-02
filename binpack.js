@@ -253,9 +253,21 @@ function optimizeAndDraw() {
   let bins = [];
   let offsetX = 0;
   let offsetY = 0;
+  const margin = 100;
 
-  for (const part of parts) {
-    for (let i = 0; i < part.count; i++) {
+const remainingParts = parts.flatMap(part => {
+    return Array.from({ length: part.count }, () => ({ ...part }));
+  });
+
+  while (remainingParts.length > 0) {
+    const bin = selectedMode === 'vertical'
+      ? new BinClass(filmWidth, filmHeight, offsetX)
+      : new BinClass(filmWidth, filmHeight, offsetY);
+
+    let binUsed = false;
+
+    for (let i = 0; i < remainingParts.length; ) {
+      const part = remainingParts[i];
       const rect = {
         id: part.id,
         width: part.width,
@@ -263,25 +275,25 @@ function optimizeAndDraw() {
         color: part.color
       };
 
-      let placed = false;
-      for (let bin of bins) {
-        if (bin.insert(rect)) {
-          allPlacements.push(rect);
-          placed = true;
-          break;
-        }
+      if (bin.insert(rect)) {
+        allPlacements.push(rect);
+        remainingParts.splice(i, 1);
+        binUsed = true;
+      } else {
+        i++;
       }
-      const margin = 100;
-      if (!placed) {
-        const newBin = new BinClass(filmWidth, filmHeight, offsetY);
-        if (newBin.insert(rect)) {
-          bins.push(newBin);
-          allPlacements.push(rect);
-          offsetY += filmHeight + margin;
-        } else {
-          console.warn("조각을 배치할 수 없습니다:", rect);
-        }
+    }
+
+    if (binUsed) {
+      bins.push(bin);
+      if (selectedMode === 'vertical') {
+        offsetX += filmWidth + margin;
+      } else {
+        offsetY += filmHeight + margin;
       }
+    } else {
+      console.warn("빈에 아무 조각도 들어가지 못했습니다. 나머지 조각:", remainingParts);
+      break;
     }
   }
 
@@ -337,6 +349,6 @@ canvas.height = Math.ceil(binMaxY * scale);
     ctx.strokeRect(p.x * scale, p.y * scale, p.width * scale, p.height * scale);
     ctx.fillStyle = '#000';
     ctx.font = '12px sans-serif';
-    ctx.fillText(`${p.id} ${p.width}x${p.height}`, (p.x + p.width / 3) * scale, (p.y + p.height / 2 + 9) * scale);
+    ctx.fillText(`${p.id} ${p.height}x${p.width}`, (p.x + p.width / 3) * scale, (p.y + p.height / 2 + 12) * scale);
   }
 }
